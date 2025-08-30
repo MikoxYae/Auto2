@@ -78,7 +78,7 @@ async def get_animes(name, torrent, force=False):
                 # Send sticker to dedicated channel
                 await bot.send_sticker(
                     channel_details['channel_id'],
-                    sticker="CAACAgUAAxkBAAEOyQtoXB1SxAZqiP0wK7NbBBxxHwUG7gAC4BMAAp6PIFcLAAGEEdQGq4s2BA"
+                    CAACAgUAAxkBAAEPRkposlhdldSDTJtDtIG1UPqyLh1xegADFQAClP0pVztrIQO4kT1INgQ"
                 )
                 
                 # Post summary to main channel with join button
