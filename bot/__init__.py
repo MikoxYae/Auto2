@@ -83,9 +83,14 @@ async def admin_filter(_, __, message):
 # Create the admin filter
 admin = filters.create(admin_filter)
 
-if Var.THUMB and not ospath.exists("thumb.jpg"):
+# Modified thumbnail handling
+if ospath.exists("bot/thumb.jpg"):
+    system("cp bot/thumb.jpg thumb.jpg")
+    LOGS.info("Local thumbnail loaded from bot/thumb.jpg")
+elif Var.THUMB and not ospath.exists("thumb.jpg"):
     system(f"wget -q {Var.THUMB} -O thumb.jpg")
-    LOGS.info("Thumbnail has been Saved!!")
+    LOGS.info("Thumbnail downloaded from URL")
+
 if not ospath.isdir("encode/"):
     mkdir("encode/")
 if not ospath.isdir("thumbs/"):
