@@ -129,38 +129,146 @@ async def encode(string):
 async def decode(b64_str):
     return urlsafe_b64decode((b64_str.strip("=") + "=" * (-len(b64_str.strip("=")) % 4)).encode("ascii")).decode("ascii")
 
-async def is_fsubbed(uid):
-    if len(Var.FSUB_CHATS) == 0:
+# ENHANCED FORCE SUBSCRIPTION FUNCTIONS
+async def is_subscribed(client, user_id):
+    """Enhanced force subscription checker with request mode support"""
+    from bot.core.database import db
+    
+    # Get all force subscription channels
+    channel_ids = await db.show_channels()
+    
+    if not channel_ids:
         return True
-    for chat_id in Var.FSUB_CHATS:
-        try:
-            member = await bot.get_chat_member(chat_id=chat_id, user_id=uid)
-        except UserNotParticipant:
+    
+    # Owner always has access
+    if user_id == Var.OWNER_ID:
+        return True
+    
+    # Check each channel
+    for channel_id in channel_ids:
+        if not await is_sub(client, user_id, channel_id):
             return False
-        except Exception as err:
-            await rep.report(format_exc(), "warning")
-            continue
+    
     return True
+
+async def is_sub(client, user_id, channel_id):
+    """Check if user is subscribed to channel (with request mode support)"""
+    from bot.core.database import db
+    
+    try:
+        # First check if user is actually a member
+        member = await client.get_chat_member(channel_id, user_id)
+        status = member.status
         
+        # If user is member/admin/owner, they have access
+        if status in {ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER}:
+            return True
+        
+        # If not a member, check if it's restricted/kicked
+        if status in {ChatMemberStatus.RESTRICTED, ChatMemberStatus.BANNED}:
+            return False
+            
+    except UserNotParticipant:
+        # User is not a member, check if channel is in request mode
+        mode = await db.get_channel_mode(channel_id)
+        
+        if mode == "on":  # Request mode is enabled
+            # Check if user has sent a join request
+            has_requested = await db.req_user_exist(channel_id, user_id)
+            await rep.report(f"🔍 Request check - User {user_id}, Channel {channel_id}, Has requested: {has_requested}", "info")
+            return has_requested
+        
+        # Normal mode and not a member = no access
+        return False
+    
+    except Exception as e:
+        await rep.report(f"Error in is_sub for user {user_id}, channel {channel_id}: {str(e)}", "error")
+        return False
+    
+    # Default fallback
+    return False
+
 async def get_fsubs(uid, txtargs):
-    txt = "<b><i>Please Join Following Channels to Use this Bot!</i></b>\n\n"
+    """Generate force subscription message and buttons"""
+    from bot.core.database import db
+    
+    txt = "<b><i>🔒 You must join our channels to access files!</i></b>\n\n"
     btns = []
-    for no, chat in enumerate(Var.FSUB_CHATS, start=1):
+    
+    channel_ids = await db.show_channels()
+    
+    for no, chat_id in enumerate(channel_ids, start=1):
         try:
-            cha = await bot.get_chat(chat)
-            member = await bot.get_chat_member(chat_id=chat, user_id=uid)
-            sta = "Joined ✅️"
-        except UserNotParticipant:
-            sta = "Not Joined ❌️"
-            inv = await bot.create_chat_invite_link(chat_id=chat)
-            btns.append([InlineKeyboardButton(cha.title, url=inv.invite_link)])
+            chat = await bot.get_chat(chat_id)
+            mode = await db.get_channel_mode(chat_id)
+            
+            try:
+                member = await bot.get_chat_member(chat_id=chat_id, user_id=uid)
+                sta = "✅ Joined"
+            except UserNotParticipant:
+                if mode == "on":
+                    # Check if user has requested
+                    has_requested = await db.req_user_exist(chat_id, uid)
+                    sta = "⏳ Request Sent" if has_requested else "❌ Not Requested"
+                else:
+                    sta = "❌ Not Joined"
+                
+                # Get or create invite link
+                link = await db.get_invite_link(chat_id)
+                if not link:
+                    try:
+                        if mode == "on" and not chat.username:
+                            # Create join request link for private channels in request mode
+                            invite = await bot.create_chat_invite_link(
+                                chat_id=chat_id,
+                                creates_join_request=True
+                            )
+                            link = invite.invite_link
+                            await db.store_invite_link(chat_id, link)
+                        else:
+                            # Use username or regular invite link
+                            if chat.username:
+                                link = f"https://t.me/{chat.username}"
+                            else:
+                                invite = await bot.create_chat_invite_link(chat_id)
+                                link = invite.invite_link
+                                await db.store_invite_link(chat_id, link)
+                    except Exception as e:
+                        await rep.report(f"Error creating invite link for {chat_id}: {str(e)}", "error")
+                        link = f"https://t.me/c/{str(chat_id)[4:]}"
+                
+                # Add join button only if not already joined/requested
+                if sta != "✅ Joined" and sta != "⏳ Request Sent":
+                    button_text = "📝 Request to Join" if mode == "on" else "🔗 Join Channel"
+                    btns.append([InlineKeyboardButton(f"{button_text} - {chat.title}", url=link)])
+            
+            except Exception as err:
+                await rep.report(f"Error checking membership for {chat_id}: {str(err)}", "error")
+                sta = "❌ Error"
+            
+            # Show channel status
+            mode_text = "REQUEST MODE" if mode == "on" else "NORMAL MODE"
+            txt += f"<b>{no}. {chat.title}</b>\n"
+            txt += f"   • <b>Status:</b> <code>{sta}</code>\n"
+            txt += f"   • <b>Mode:</b> <code>{mode_text}</code>\n\n"
+        
         except Exception as err:
-            await rep.report(format_exc(), "warning")
+            await rep.report(f"Error processing channel {chat_id}: {str(err)}", "error")
             continue
-        txt += f"<b>{no}. Title :</b> <i>{cha.title}</i>\n  <b>Status :</b> <i>{sta}</i>\n\n"
+    
+    # Add refresh button
+    btns.append([InlineKeyboardButton("🔄 Refresh", callback_data="refresh_fsub")])
+    
+    # Add get files button if there are txtargs
     if len(txtargs) > 1:
-        btns.append([InlineKeyboardButton('🗂 Get Files', url=f'https://t.me/{(await bot.get_me()).username}?start={txtargs[1]}')])
+        btns.append([InlineKeyboardButton('📁 Get Files', url=f'https://t.me/{(await bot.get_me()).username}?start={txtargs[1]}')])
+    
     return txt, btns
+
+# LEGACY SUPPORT (keeping old function names for compatibility)
+async def is_fsubbed(uid):
+    """Legacy function - redirects to new enhanced version"""
+    return await is_subscribed(bot, uid)
 
 async def mediainfo(file, get_json=False, get_duration=False):
     try:
