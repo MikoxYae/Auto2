@@ -26,7 +26,7 @@ class TgUploader:
             if Var.AS_DOC:
                 return await self.__client.send_document(chat_id=Var.FILE_STORE,
                     document=path,
-                    thumb="thumb.jpg" if ospath.exists("thumb.jpg") else None,
+                    thumb="bot/thumb.jpg" if ospath.exists("bot/thumb.jpg") else ("thumb.jpg" if ospath.exists("thumb.jpg") else None),
                     caption=f"<b>{self.__name}</b>",
                     force_document=True,
                     progress=self.progress_status
@@ -34,7 +34,7 @@ class TgUploader:
             else:
                 return await self.__client.send_video(chat_id=Var.FILE_STORE,
                     document=path,
-                    thumb="thumb.jpg" if ospath.exists("thumb.jpg") else None,
+                    thumb="bot/thumb.jpg" if ospath.exists("bot/thumb.jpg") else ("thumb.jpg" if ospath.exists("thumb.jpg") else None),
                     caption=f"<b>{self.__name}</b>",
                     progress=self.progress_status
                 )
