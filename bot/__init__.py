@@ -5,7 +5,8 @@ from asyncio import Queue, Lock
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pyrogram import Client, filters
-from pyrogram.enums import ParseMode
+from pyrogram.enums import ParseMode, ChatMemberStatus
+from pyrogram.types import ChatMemberUpdated
 from dotenv import load_dotenv
 from uvloop import install
 
@@ -40,7 +41,7 @@ class Var:
         exit(1)
 
     RSS_ITEMS = getenv("RSS_ITEMS", "https://subsplease.org/rss/?r=1080").split()
-    FSUB_CHATS = list(map(int, getenv('FSUB_CHATS').split()))
+    FSUB_CHATS = list(map(int, getenv('FSUB_CHATS', '').split())) if getenv('FSUB_CHATS') else []
     BACKUP_CHANNEL = getenv("BACKUP_CHANNEL") or ""
     MAIN_CHANNEL = int(getenv("MAIN_CHANNEL"))
     LOG_CHANNEL = int(getenv("LOG_CHANNEL") or 0)
@@ -105,3 +106,45 @@ try:
 except Exception as ee:
     LOGS.error(str(ee))
     exit(1)
+
+# Force Subscription Event Handlers
+@bot.on_chat_member_updated()
+async def handle_chat_members(client, chat_member_updated: ChatMemberUpdated):
+    """Handle member updates for force subscription channels"""
+    try:
+        from bot.core.database import db
+        
+        chat_id = chat_member_updated.chat.id
+        
+        if await db.reqChannel_exist(chat_id):
+            old_member = chat_member_updated.old_chat_member
+            
+            if not old_member:
+                return
+            
+            if old_member.status == ChatMemberStatus.MEMBER:
+                user_id = old_member.user.id
+                
+                if await db.req_user_exist(chat_id, user_id):
+                    await db.del_req_user(chat_id, user_id)
+                    LOGS.info(f"Removed user {user_id} from request list for channel {chat_id}")
+    except Exception as e:
+        LOGS.error(f"Error in handle_chat_members: {e}")
+
+@bot.on_chat_join_request()
+async def handle_join_request(client, chat_join_request):
+    """Handle join requests for force subscription channels"""
+    try:
+        from bot.core.database import db
+        
+        chat_id = chat_join_request.chat.id
+        user_id = chat_join_request.from_user.id
+        
+        channel_exists = await db.reqChannel_exist(chat_id)
+        
+        if channel_exists:
+            if not await db.req_user_exist(chat_id, user_id):
+                await db.req_user(chat_id, user_id)
+                LOGS.info(f"Added user {user_id} to request list for channel {chat_id}")
+    except Exception as e:
+        LOGS.error(f"Error in handle_join_request: {e}")
