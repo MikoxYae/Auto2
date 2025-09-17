@@ -1,6 +1,7 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime
 import re
+import time
 from bot.core.reporter import rep
 
 class Database:
@@ -49,6 +50,17 @@ class Database:
             )
         except Exception as e:
             await rep.report(f"Error adding user: {str(e)}", "error")
+
+    async def present_user(self, user_id):
+        """Check if user exists in database"""
+        try:
+            if self.db is None:
+                await self.connect()
+            user = await self.db.users.find_one({"user_id": user_id})
+            return bool(user)
+        except Exception as e:
+            await rep.report(f"Error checking user presence: {str(e)}", "error")
+            return False
 
     async def is_banned(self, user_id):
         """Check if user is banned"""
@@ -351,7 +363,7 @@ class Database:
             return None
 
     async def remove_pending_connection(self, user_id):
-        """Remove pending connection"""
+        """Remove pending connection for user"""
         try:
             if self.db is None:
                 await self.connect()
@@ -361,9 +373,52 @@ class Database:
             await rep.report(f"Error removing pending connection: {str(e)}", "error")
             return False
 
+    def clean_name_for_matching(self, name):
+        """Clean anime name for better matching"""
+        import re
+        # Remove common anime release tags
+        patterns_to_remove = [
+            r'\[.*?\]',  # Remove anything in brackets
+            r'\(.*?\)',  # Remove anything in parentheses  
+            r'- \d+',    # Remove episode numbers
+            r'S\d+',     # Remove season numbers
+            r'1080p|720p|480p|HEVC|x264|x265',  # Remove quality tags
+            r'SubsPlease|Erai-raws|HorribleSubs',  # Remove group tags
+        ]
+        
+        cleaned = name
+        for pattern in patterns_to_remove:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
+        
+        return cleaned.strip()
+
+    async def get_del_timer(self):
+        """Get auto-delete timer"""
+        try:
+            if self.db is None:
+                await self.connect()
+            settings = await self.db.settings.find_one({"key": "del_timer"})
+            return int(settings.get("value", 600)) if settings else 600
+        except Exception as e:
+            await rep.report(f"Error getting delete timer: {str(e)}", "error")
+            return 600
+
+    async def set_del_timer(self, timer):
+        """Set auto-delete timer"""
+        try:
+            if self.db is None:
+                await self.connect()
+            await self.db.settings.update_one(
+                {"key": "del_timer"},
+                {"$set": {"key": "del_timer", "value": timer}},
+                upsert=True
+            )
+        except Exception as e:
+            await rep.report(f"Error setting delete timer: {str(e)}", "error")
+
     # CUSTOM BANNERS MANAGEMENT
     async def add_custom_banner(self, anime_name, banner_file_id):
-        """Add custom banner"""
+        """Add custom banner for anime"""
         try:
             if self.db is None:
                 await self.connect()
@@ -381,6 +436,17 @@ class Database:
             return True
         except Exception as e:
             await rep.report(f"Error adding custom banner: {str(e)}", "error")
+            return False
+
+    async def remove_custom_banner(self, anime_name):
+        """Remove custom banner for anime"""
+        try:
+            if self.db is None:
+                await self.connect()
+            result = await self.db.custom_banners.delete_one({"anime_name": anime_name})
+            return result.deleted_count > 0
+        except Exception as e:
+            await rep.report(f"Error removing custom banner: {str(e)}", "error")
             return False
 
     async def get_custom_banner(self, anime_name):
@@ -403,60 +469,322 @@ class Database:
             banners = []
             async for banner in cursor:
                 banners.append({
-                    "anime_name": banner["anime_name"],
-                    "banner_file_id": banner["banner_file_id"],
-                    "date_added": banner.get("date_added", "Unknown")
+                    'anime_name': banner["anime_name"],
+                    'banner_file_id': banner["banner_file_id"],
+                    'date_added': banner.get("date_added", "Unknown")
                 })
             return banners
         except Exception as e:
-            await rep.report(f"Error getting all banners: {str(e)}", "error")
+            await rep.report(f"Error getting all custom banners: {str(e)}", "error")
             return []
 
-    async def remove_custom_banner(self, anime_name):
-        """Remove custom banner"""
+    # FORCE SUBSCRIPTION METHODS
+    async def add_channel(self, channel_id):
+        """Add force subscription channel"""
         try:
             if self.db is None:
                 await self.connect()
-            result = await self.db.custom_banners.delete_one({"anime_name": anime_name})
-            return result.deleted_count > 0
-        except Exception as e:
-            await rep.report(f"Error removing banner: {str(e)}", "error")
-            return False
-
-    # SETTINGS MANAGEMENT
-    async def set_del_timer(self, duration):
-        """Set auto-delete timer"""
-        try:
-            if self.db is None:
-                await self.connect()
-            await self.db.settings.update_one(
-                {"key": "del_timer"},
-                {"$set": {"key": "del_timer", "value": str(duration)}},
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            channel_data = {
+                "channel_id": channel_id,
+                "mode": "off",  # Default mode is off
+                "date_added": current_time
+            }
+            await self.db.force_sub_channels.update_one(
+                {"channel_id": channel_id},
+                {"$set": channel_data},
                 upsert=True
             )
+            return True
         except Exception as e:
-            await rep.report(f"Error setting delete timer: {str(e)}", "error")
+            await rep.report(f"Error adding force sub channel: {str(e)}", "error")
+            return False
 
-    async def get_del_timer(self):
-        """Get auto-delete timer"""
+    async def rem_channel(self, channel_id):
+        """Remove force subscription channel"""
         try:
             if self.db is None:
                 await self.connect()
-            setting = await self.db.settings.find_one({"key": "del_timer"})
-            return int(setting["value"]) if setting else 600  # Default 10 minutes
+            result = await self.db.force_sub_channels.delete_one({"channel_id": channel_id})
+            # Also remove any join requests for this channel
+            await self.db.join_request_channels.delete_many({"channel_id": channel_id})
+            # Remove invite links data
+            await self.db.force_sub_channels.update_one(
+                {"channel_id": channel_id},
+                {"$unset": {"invite_link": "", "link_expire_date": ""}}
+            )
+            return result.deleted_count > 0
         except Exception as e:
-            await rep.report(f"Error getting delete timer: {str(e)}", "error")
-            return 600
+            await rep.report(f"Error removing force sub channel: {str(e)}", "error")
+            return False
 
-    # HELPER METHODS
-    def clean_name_for_matching(self, name):
-        """Clean name for matching"""
-        # Remove common patterns
-        name = re.sub(r'\[.*?\]', '', name)  # Remove brackets
-        name = re.sub(r'\(.*?\)', '', name)  # Remove parentheses
-        name = re.sub(r'[_\-\.]', ' ', name)  # Replace separators with spaces
-        name = re.sub(r'\s+', ' ', name)  # Multiple spaces to single
-        return name.strip()
+    async def show_channels(self):
+        """Get all force subscription channels"""
+        try:
+            if self.db is None:
+                await self.connect()
+            cursor = self.db.force_sub_channels.find({})
+            channels = []
+            async for channel in cursor:
+                channels.append(channel["channel_id"])
+            return channels
+        except Exception as e:
+            await rep.report(f"Error getting force sub channels: {str(e)}", "error")
+            return []
+
+    async def set_channel_mode(self, channel_id, mode):
+        """Set channel mode (on/off for request mode)"""
+        try:
+            if self.db is None:
+                await self.connect()
+            await self.db.force_sub_channels.update_one(
+                {"channel_id": channel_id},
+                {"$set": {"mode": mode}},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            await rep.report(f"Error setting channel mode: {str(e)}", "error")
+            return False
+
+    async def get_channel_mode(self, channel_id):
+        """Get channel mode"""
+        try:
+            if self.db is None:
+                await self.connect()
+            channel = await self.db.force_sub_channels.find_one({"channel_id": channel_id})
+            return channel.get("mode", "off") if channel else "off"
+        except Exception as e:
+            await rep.report(f"Error getting channel mode: {str(e)}", "error")
+            return "off"
+
+    async def reqChannel_exist(self, channel_id):
+        """Check if channel exists in force sub list"""
+        try:
+            if self.db is None:
+                await self.connect()
+            channel_ids = await self.show_channels()
+            return int(channel_id) in channel_ids
+        except Exception as e:
+            await rep.report(f"Error checking if channel exists: {str(e)}", "error")
+            return False
+
+    # FORCE SUBSCRIPTION REQUEST MODE METHODS
+    async def store_invite_link(self, channel_id, invite_link, expire_date=None):
+        """Store invite link for a channel"""
+        try:
+            if self.db is None:
+                await self.connect()
+            await self.db.force_sub_channels.update_one(
+                {"channel_id": channel_id},
+                {"$set": {
+                    "invite_link": invite_link,
+                    "link_expire_date": expire_date,
+                    "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            await rep.report(f"Error storing invite link: {str(e)}", "error")
+            return False
+
+    async def get_invite_link(self, channel_id):
+        """Get stored invite link for a channel"""
+        try:
+            if self.db is None:
+                await self.connect()
+            data = await self.db.force_sub_channels.find_one({"channel_id": channel_id})
+            if data and data.get('invite_link'):
+                # Check if link has expired
+                if data.get('link_expire_date'):
+                    if int(time.time()) >= data['link_expire_date']:
+                        return None
+                return data['invite_link']
+            return None
+        except Exception as e:
+            await rep.report(f"Error getting invite link: {str(e)}", "error")
+            return None
+
+    async def req_user(self, channel_id, user_id):
+        """Add user to join request list"""
+        try:
+            if self.db is None:
+                await self.connect()
+            await self.db.join_request_channels.update_one(
+                {"channel_id": int(channel_id)},
+                {"$addToSet": {"user_ids": int(user_id)}},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            await rep.report(f"Error adding user to request list: {str(e)}", "error")
+            return False
+
+    async def del_req_user(self, channel_id, user_id):
+        """Remove user from join request list"""
+        try:
+            if self.db is None:
+                await self.connect()
+            await self.db.join_request_channels.update_one(
+                {"channel_id": int(channel_id)},
+                {"$pull": {"user_ids": int(user_id)}}
+            )
+            return True
+        except Exception as e:
+            await rep.report(f"Error removing user from request list: {str(e)}", "error")
+            return False
+
+    async def req_user_exist(self, channel_id, user_id):
+        """Check if user exists in join request list"""
+        try:
+            if self.db is None:
+                await self.connect()
+            found = await self.db.join_request_channels.find_one({
+                "channel_id": int(channel_id),
+                "user_ids": int(user_id)
+            })
+            return bool(found)
+        except Exception as e:
+            await rep.report(f"Error checking request list: {str(e)}", "error")
+            return False
+
+    # TOKEN MANAGEMENT METHODS
+    async def store_token(self, user_id, token, expire_seconds):
+        """Store verification token with expiry"""
+        try:
+            if self.db is None:
+                await self.connect()
+            expire_time = time.time() + expire_seconds
+            await self.db.tokens.update_one(
+                {"user_id": user_id},
+                {"$set": {
+                    "token": token,
+                    "expire_time": expire_time,
+                    "created_time": time.time()
+                }},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            await rep.report(f"Error storing token: {str(e)}", "error")
+            return False
+
+    async def is_token_valid(self, token):
+        """Check if token exists and is not expired"""
+        try:
+            if self.db is None:
+                await self.connect()
+            current_time = time.time()
+            token_data = await self.db.tokens.find_one({
+                "token": token,
+                "expire_time": {"$gt": current_time}
+            })
+            return bool(token_data)
+        except Exception as e:
+            await rep.report(f"Error validating token: {str(e)}", "error")
+            return False
+
+    async def remove_token(self, token):
+        """Remove token after successful verification"""
+        try:
+            if self.db is None:
+                await self.connect()
+            await self.db.tokens.delete_one({"token": token})
+            return True
+        except Exception as e:
+            await rep.report(f"Error removing token: {str(e)}", "error")
+            return False
+
+    async def get_user_token(self, user_id):
+        """Get user's current valid token"""
+        try:
+            if self.db is None:
+                await self.connect()
+            current_time = time.time()
+            token_data = await self.db.tokens.find_one({
+                "user_id": user_id,
+                "expire_time": {"$gt": current_time}
+            })
+            if token_data:
+                return token_data.get("token")
+            return None
+        except Exception as e:
+            await rep.report(f"Error getting user token: {str(e)}", "error")
+            return None
+
+    # VERIFICATION STATUS METHODS
+    async def get_verify_status(self, user_id):
+        """Get user verification status"""
+        try:
+            if self.db is None:
+                await self.connect()
+            user = await self.db.users.find_one({"user_id": user_id})
+            if user and "verify_status" in user:
+                return user["verify_status"]
+            return {
+                'is_verified': False,
+                'verified_time': 0,
+                'verify_token': "",
+                'link': ""
+            }
+        except Exception as e:
+            await rep.report(f"Error getting verify status: {str(e)}", "error")
+            return {
+                'is_verified': False,
+                'verified_time': 0,
+                'verify_token': "",
+                'link': ""
+            }
+
+    async def update_verify_status(self, user_id, verify_token="", is_verified=False, verified_time=0, link=""):
+        """Update user verification status"""
+        try:
+            if self.db is None:
+                await self.connect()
+            verify_status = {
+                'verify_token': verify_token,
+                'is_verified': is_verified,
+                'verified_time': verified_time,
+                'link': link
+            }
+            await self.db.users.update_one(
+                {"user_id": user_id},
+                {"$set": {"verify_status": verify_status}},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            await rep.report(f"Error updating verify status: {str(e)}", "error")
+            return False
+
+    async def get_verify_count(self, user_id):
+        """Get user verification count"""
+        try:
+            if self.db is None:
+                await self.connect()
+            user = await self.db.verify_counts.find_one({"user_id": user_id})
+            if user:
+                return user.get("verify_count", 0)
+            return 0
+        except Exception as e:
+            await rep.report(f"Error getting verify count: {str(e)}", "error")
+            return 0
+
+    async def set_verify_count(self, user_id, count):
+        """Set user verification count"""
+        try:
+            if self.db is None:
+                await self.connect()
+            await self.db.verify_counts.update_one(
+                {"user_id": user_id},
+                {"$set": {"verify_count": count}},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            await rep.report(f"Error setting verify count: {str(e)}", "error")
+            return False
 
 # Create database instance
 db = Database()
