@@ -4,6 +4,7 @@ from random import choice
 from asyncio import sleep as asleep
 from aiohttp import ClientSession
 from anitopy import parse
+import re
 
 from bot import Var, bot
 from .database import db
@@ -29,9 +30,7 @@ MAIN_CAPTION_FORMAT = """
 <b>➤ Episode - {ep_no}</b>
 <b>➤ Quality: Multi [Sub]</b>
 <b>────────────────────────────</b>
-<blockquote><b>‣ Synopsis : {synopsis}
-
-📖 Tap to expand/collapse</b></blockquote>
+<blockquote><b>‣ Synopsis : {synopsis} </b></blockquote>
 """
 
 GENRES_EMOJI = {"Action": "👊", "Adventure": choice(['🪂', '🧗‍♀']), "Comedy": "🤣", "Drama": " 🎭", "Ecchi": choice(['💋', '🥵']), "Fantasy": choice(['🧞', '🧞‍♂', '🧞‍♀','🌗']), "Hentai": "🔞", "Horror": "☠", "Mahou Shoujo": "☯", "Mecha": "🤖", "Music": "🎸", "Mystery": "🔮", "Psychological": "♟", "Romance": "💞", "Sci-Fi": "🛸", "Slice of Life": choice(['☘','🍁']), "Sports": "⚽️", "Supernatural": "🫧", "Thriller": "🔥"}
@@ -262,8 +261,6 @@ class TextEditor:
             torrent_name = self.__name
             
             # Remove common patterns to get episode title
-            import re
-            
             # Remove resolution, groups, year, etc.
             clean_name = re.sub(r'\[.*?\]', '', torrent_name)  # Remove [groups], [1080p], etc.
             clean_name = re.sub(r'\(.*?\)', '', clean_name)    # Remove (year), etc.
@@ -294,7 +291,7 @@ class TextEditor:
         brand = Var.BRAND_UNAME.strip('@')
         
         # Generate filename: S01Ep01 - Episode Title [480p][@TeamWarlords].mkv
-        filename = f"S{season_num}Ep{episode_num} - {episode_title} [{qual}p][{brand}].mkv"
+        filename = f"S{season_num}Ep{episode_num} - {episode_title} [{qual}p][@{brand}].mkv"
         
         # Clean filename (remove invalid characters)
         filename = re.sub(r'[<>:"/\\|?*]', '', filename)
