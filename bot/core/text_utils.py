@@ -11,15 +11,30 @@ from .ffencoder import ffargs
 from .func_utils import handle_logs
 from .reporter import rep
 
-CAPTION_FORMAT = """
-<b>{title} </b>
-<b>──────────────────────────── </b>
-<b>➤ Season - 01 </b>
-<b>➤ Episode - {ep_no} </b>
-<b>➤ Quality: Multi [Sub] </b>
-<b>──────────────────────────── </b>
+# Caption format for dedicated channels (without synopsis)
+DEDICATED_CAPTION_FORMAT = """
+<b>{title}</b>
+<b>──────────────────────────────</b>
+<b>➤ Season - {season}</b>
+<b>➤ Episode - {ep_no}</b>
+<b>➤ Quality: Multi [Sub]</b>
+<b>──────────────────────────────</b>
 """
-GENRES_EMOJI = {"Action": "👊", "Adventure": choice(['🪂', '🧗‍♀']), "Comedy": "🤣", "Drama": " 🎭", "Ecchi": choice(['💋', '🥵']), "Fantasy": choice(['🧞', '🧞‍♂', '🧞‍♀','🌗']), "Hentai": "🔞", "Horror": "☠", "Mahou Shoujo": "☯", "Mecha": "🤖", "Music": "🎸", "Mystery": "🔮", "Psychological": "♟", "Romance": "💞", "Sci-Fi": "🛸", "Slice of Life": choice(['☘','🍁']), "Sports": "⚽️", "Supernatural": "🫧", "Thriller": choice(['🥶', '🔥'])}
+
+# Caption format for main channel (with synopsis in blockquote)
+MAIN_CAPTION_FORMAT = """
+<b>{title}</b>
+<b>──────────────────────────────</b>
+<b>➤ Season - {season}</b>
+<b>➤ Episode - {ep_no}</b>
+<b>➤ Quality: Multi [Sub]</b>
+<b>────────────────────────────</b>
+<blockquote><b>‣ Synopsis : {synopsis}
+
+📖 Tap to expand/collapse</b></blockquote>
+"""
+
+GENRES_EMOJI = {"Action": "👊", "Adventure": choice(['🪂', '🧗‍♀']), "Comedy": "🤣", "Drama": " 🎭", "Ecchi": choice(['💋', '🥵']), "Fantasy": choice(['🧞', '🧞‍♂', '🧞‍♀','🌗']), "Hentai": "🔞", "Horror": "☠", "Mahou Shoujo": "☯", "Mecha": "🤖", "Music": "🎸", "Mystery": "🔮", "Psychological": "♟", "Romance": "💞", "Sci-Fi": "🛸", "Slice of Life": choice(['☘','🍁']), "Sports": "⚽️", "Supernatural": "🫧", "Thriller": "🔥"}
 
 ANIME_GRAPHQL_QUERY = """
 query ($id: Int, $search: String, $seasonYear: Int) {
@@ -214,32 +229,110 @@ class TextEditor:
         
     @handle_logs
     async def get_upname(self, qual=""):
-        anime_name = self.pdata.get("anime_title")
-        codec = 'HEVC' if 'libx265' in ffargs[qual] else 'AV1' if 'libaom-av1' in ffargs[qual] else ''
-        lang = 'Multi-Audio' if 'multi-audio' in self.__name.lower() else 'Sub'
-        anime_season = str(ani_s[-1]) if (ani_s := self.pdata.get('anime_season', '01')) and isinstance(ani_s, list) else str(ani_s)
-        if anime_name and self.pdata.get("episode_number"):
-            titles = self.adata.get('title', {})
-            return f"""[S{anime_season}-{'E'+str(self.pdata.get('episode_number')) if self.pdata.get('episode_number') else ''}] {titles.get('english') or titles.get('romaji') or titles.get('native')} {'['+qual+'p]' if qual else ''} {'['+codec.upper()+'] ' if codec else ''}{'['+lang+']'} {Var.BRAND_UNAME}.mkv"""
+        """Generate filename in format: S01Ep01 - Episode Title [480p][@TeamWarlords].mkv"""
+        
+        # Get season and episode numbers
+        anime_season = self.pdata.get("anime_season", "01")
+        if isinstance(anime_season, list):
+            season_num = str(anime_season[-1]).zfill(2)
+        else:
+            season_num = str(anime_season).zfill(2) if anime_season else "01"
+        
+        episode_num = str(self.pdata.get("episode_number", "01")).zfill(2)
+        
+        # Try to get episode title from AniList data
+        episode_title = "Unknown Episode"
+        
+        # Check if we have episode data from AniList
+        if self.adata and 'airingSchedule' in self.adata:
+            try:
+                # Look for the specific episode in airing schedule
+                current_ep = int(episode_num)
+                for edge in self.adata['airingSchedule']['edges']:
+                    if edge['node']['episode'] == current_ep:
+                        # For now, we'll use a generic title since AniList doesn't provide episode titles
+                        episode_title = f"Episode {current_ep}"
+                        break
+            except:
+                pass
+        
+        # If no specific episode title found, use torrent name parsing
+        if episode_title == "Unknown Episode":
+            # Try to extract episode title from torrent name
+            torrent_name = self.__name
+            
+            # Remove common patterns to get episode title
+            import re
+            
+            # Remove resolution, groups, year, etc.
+            clean_name = re.sub(r'\[.*?\]', '', torrent_name)  # Remove [groups], [1080p], etc.
+            clean_name = re.sub(r'\(.*?\)', '', clean_name)    # Remove (year), etc.
+            clean_name = re.sub(r'20\d{2}', '', clean_name)    # Remove years
+            clean_name = re.sub(r'S\d+', '', clean_name, flags=re.IGNORECASE)  # Remove season
+            clean_name = re.sub(r'EP?\d+', '', clean_name, flags=re.IGNORECASE)  # Remove episode
+            clean_name = re.sub(r'Episode\s*\d+', '', clean_name, flags=re.IGNORECASE)
+            clean_name = re.sub(r'第\d+話', '', clean_name)     # Remove Japanese episode
+            clean_name = re.sub(r'\d+p', '', clean_name, flags=re.IGNORECASE)  # Remove quality
+            clean_name = re.sub(r'(HEVC|H\.?264|H\.?265|x264|x265)', '', clean_name, flags=re.IGNORECASE)
+            clean_name = re.sub(r'(1080|720|480)', '', clean_name)
+            clean_name = re.sub(r'-\s*$', '', clean_name)      # Remove trailing dash
+            clean_name = clean_name.strip(' -')
+            
+            # Split by common separators and take meaningful part
+            parts = re.split(r'[-–—]', clean_name)
+            if len(parts) > 1:
+                episode_title = parts[-1].strip()
+            else:
+                episode_title = clean_name or f"Episode {episode_num}"
+        
+        # Clean episode title
+        episode_title = episode_title.strip()
+        if not episode_title or episode_title.lower() in ['unknown episode', 'episode']:
+            episode_title = f"Episode {episode_num}"
+        
+        # Format brand name (remove @ if already present)
+        brand = Var.BRAND_UNAME.strip('@')
+        
+        # Generate filename: S01Ep01 - Episode Title [480p][@TeamWarlords].mkv
+        filename = f"S{season_num}Ep{episode_num} - {episode_title} [{qual}p][{brand}].mkv"
+        
+        # Clean filename (remove invalid characters)
+        filename = re.sub(r'[<>:"/\\|?*]', '', filename)
+        filename = re.sub(r'\s+', ' ', filename)  # Replace multiple spaces with single space
+        
+        return filename
 
     @handle_logs
-    async def get_caption(self):
-        sd = self.adata.get('startDate', {})
-        startdate = f"{month_name[sd['month']]} {sd['day']}, {sd['year']}" if sd.get('day') and sd.get('year') else ""
-        ed = self.adata.get('endDate', {})
-        enddate = f"{month_name[ed['month']]} {ed['day']}, {ed['year']}" if ed.get('day') and ed.get('year') else ""
+    async def get_caption(self, is_main_channel=False):
+        """Get caption for posts - different format for main channel vs dedicated channels"""
         titles = self.adata.get("title", {})
+        title = titles.get('english') or titles.get('romaji') or titles.get('native') or "Unknown Anime"
         
-        return CAPTION_FORMAT.format(
-                title=titles.get('english') or titles.get('romaji') or titles.get('native'),
-                form=self.adata.get("format") or "N/A",
-                genres=", ".join(f"{GENRES_EMOJI[x]} #{x.replace(' ', '_').replace('-', '_')}" for x in (self.adata.get('genres') or [])),
-                avg_score=f"{sc}%" if (sc := self.adata.get('averageScore')) else "N/A",
-                status=self.adata.get("status") or "N/A",
-                start_date=startdate or "N/A",
-                end_date=enddate or "N/A",
-                t_eps=self.adata.get("episodes") or "N/A",
-                plot= (desc if (desc := self.adata.get("description") or "N/A") and len(desc) < 200 else desc[:200] + "..."),
-                ep_no=self.pdata.get("episode_number"),
-                cred=Var.BRAND_UNAME,
+        # Get season and episode from parsed data
+        season = self.pdata.get("anime_season", "01")
+        if isinstance(season, list):
+            season = str(season[-1]).zfill(2)
+        else:
+            season = str(season).zfill(2) if season else "01"
+        
+        episode = str(self.pdata.get("episode_number", "01")).zfill(2)
+        
+        if is_main_channel:
+            # Main channel format with synopsis and expand indicator
+            synopsis = self.adata.get("description", "No synopsis available.")
+            if synopsis and len(synopsis) > 800:
+                synopsis = synopsis[:800] + "..."
+            
+            return MAIN_CAPTION_FORMAT.format(
+                title=title,
+                season=season,
+                ep_no=episode,
+                synopsis=synopsis
+            )
+        else:
+            # Dedicated channel format without synopsis
+            return DEDICATED_CAPTION_FORMAT.format(
+                title=title,
+                season=season,
+                ep_no=episode
             )
