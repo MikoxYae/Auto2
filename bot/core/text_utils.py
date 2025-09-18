@@ -228,7 +228,7 @@ class TextEditor:
         
     @handle_logs
     async def get_upname(self, qual=""):
-        """Generate filename in format: S01Ep01 - Episode Title [480p][@TeamWarlords].mkv"""
+        """Generate filename in format: S{season}E{episode} Anime Name {quality} [@TeamWarlords].mkv"""
         
         # Get season and episode numbers
         anime_season = self.pdata.get("anime_season", "01")
@@ -239,63 +239,28 @@ class TextEditor:
         
         episode_num = str(self.pdata.get("episode_number", "01")).zfill(2)
         
-        # Try to get episode title from AniList data
-        episode_title = "Unknown Episode"
+        # Get clean anime title from AniList data
+        titles = self.adata.get("title", {})
+        clean_title = titles.get('english') or titles.get('romaji') or titles.get('native')
         
-        # Check if we have episode data from AniList
-        if self.adata and 'airingSchedule' in self.adata:
-            try:
-                # Look for the specific episode in airing schedule
-                current_ep = int(episode_num)
-                for edge in self.adata['airingSchedule']['edges']:
-                    if edge['node']['episode'] == current_ep:
-                        # For now, we'll use a generic title since AniList doesn't provide episode titles
-                        episode_title = f"Episode {current_ep}"
-                        break
-            except:
-                pass
+        # If no AniList title, use parsed anime name
+        if not clean_title:
+            clean_title = self.pdata.get("anime_title", "Unknown Anime")
         
-        # If no specific episode title found, use torrent name parsing
-        if episode_title == "Unknown Episode":
-            # Try to extract episode title from torrent name
-            torrent_name = self.__name
-            
-            # Remove common patterns to get episode title
-            # Remove resolution, groups, year, etc.
-            clean_name = re.sub(r'\[.*?\]', '', torrent_name)  # Remove [groups], [1080p], etc.
-            clean_name = re.sub(r'\(.*?\)', '', clean_name)    # Remove (year), etc.
-            clean_name = re.sub(r'20\d{2}', '', clean_name)    # Remove years
-            clean_name = re.sub(r'S\d+', '', clean_name, flags=re.IGNORECASE)  # Remove season
-            clean_name = re.sub(r'EP?\d+', '', clean_name, flags=re.IGNORECASE)  # Remove episode
-            clean_name = re.sub(r'Episode\s*\d+', '', clean_name, flags=re.IGNORECASE)
-            clean_name = re.sub(r'第\d+話', '', clean_name)     # Remove Japanese episode
-            clean_name = re.sub(r'\d+p', '', clean_name, flags=re.IGNORECASE)  # Remove quality
-            clean_name = re.sub(r'(HEVC|H\.?264|H\.?265|x264|x265)', '', clean_name, flags=re.IGNORECASE)
-            clean_name = re.sub(r'(1080|720|480)', '', clean_name)
-            clean_name = re.sub(r'-\s*$', '', clean_name)      # Remove trailing dash
-            clean_name = clean_name.strip(' -')
-            
-            # Split by common separators and take meaningful part
-            parts = re.split(r'[-–—]', clean_name)
-            if len(parts) > 1:
-                episode_title = parts[-1].strip()
-            else:
-                episode_title = clean_name or f"Episode {episode_num}"
-        
-        # Clean episode title
-        episode_title = episode_title.strip()
-        if not episode_title or episode_title.lower() in ['unknown episode', 'episode']:
-            episode_title = f"Episode {episode_num}"
+        # Clean the title for filename use
+        clean_title = re.sub(r'[<>:"/\\|?*]', '', clean_title)
+        clean_title = re.sub(r'\s+', ' ', clean_title).strip()
         
         # Format brand name (remove @ if already present)
         brand = Var.BRAND_UNAME.strip('@')
         
-        # Generate filename: S01Ep01 - Episode Title [480p][@TeamWarlords].mkv
-        filename = f"S{season_num}Ep{episode_num} - {episode_title} [{qual}p][@{brand}].mkv"
+        # Generate filename: S{season}E{episode} Anime Name {quality} [@TeamWarlords].mkv
+        filename = f"S{season_num}E{episode_num} {clean_title} {qual}p [@{brand}].mkv"
         
-        # Clean filename (remove invalid characters)
+        # Final cleanup of filename
         filename = re.sub(r'[<>:"/\\|?*]', '', filename)
         filename = re.sub(r'\s+', ' ', filename)  # Replace multiple spaces with single space
+        filename = filename.strip()
         
         return filename
 
