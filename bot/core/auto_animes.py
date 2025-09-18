@@ -160,9 +160,9 @@ async def get_animes(name, torrent, force=False):
                 
                 if post_msg:
                     if len(btns) != 0 and len(btns[-1]) == 1:
-                        btns[-1].insert(1, InlineKeyboardButton(f"{btn_formatter[qual]} - {convertBytes(msg.document.file_size)}", url=link))
+                        btns[-1].insert(1, InlineKeyboardButton(f"{btn_formatter[qual]}", url=link))
                     else:
-                        btns.append([InlineKeyboardButton(f"{btn_formatter[qual]} - {convertBytes(msg.document.file_size)}", url=link)])
+                        btns.append([InlineKeyboardButton(f"{btn_formatter[qual]}", url=link)])
                     await editMessage(post_msg, post_msg.caption.html if post_msg.caption else "", InlineKeyboardMarkup(btns))
                     
                 await db.saveAnime(ani_id, ep_no, qual, post_id)
@@ -286,44 +286,22 @@ def extract_episode_info(anime_title, aniInfo=None):
         for pattern in episode_patterns:
             episode_match = re.search(pattern, anime_title)
             if episode_match:
-                episode_num = episode_match.group(1)
-                # Avoid matching year-like numbers
-                if len(episode_num) <= 3 and int(episode_num) <= 999:
-                    info['episode'] = episode_num.zfill(2)
-                    break
-    
-    # Quality detection with more patterns
-    quality_patterns = {
-        '1080p': [r'1080p?', r'FHD', r'1920x1080'],
-        '720p': [r'720p?', r'HD', r'1280x720'],
-        '480p': [r'480p?', r'SD', r'854x480'],
-        'HEVC': [r'HEVC', r'H\.?265', r'x265'],
-        '4K': [r'4K', r'2160p', r'UHD', r'3840x2160']
-    }
-    
-    title_upper = anime_title.upper()
-    
-    for quality, patterns in quality_patterns.items():
-        for pattern in patterns:
-            if re.search(pattern, title_upper):
-                if quality == 'HEVC':
-                    info['quality'] = 'HEVC [Sub]'
-                    info['codec'] = 'H.265'
-                elif quality == '4K':
-                    info['quality'] = '4K [Sub]'
-                else:
-                    info['quality'] = f'{quality} [Sub]'
+                info['episode'] = episode_match.group(1).zfill(2)
                 break
-        if info['quality'] != 'Multi [Sub]':
-            break
+    
+    # Quality detection
+    if '1080p' in anime_title or '1080P' in anime_title:
+        info['quality'] = '1080p [Sub]'
+    elif '720p' in anime_title or '720P' in anime_title:
+        info['quality'] = '720p [Sub]'
+    elif '480p' in anime_title or '480P' in anime_title:
+        info['quality'] = '480p [Sub]'
     
     return info
 
 async def extra_utils(msg_id, out_path):
-    msg = await bot.get_messages(Var.FILE_STORE, message_ids=msg_id)
-
-    if Var.BACKUP_CHANNEL != 0:
-        for chat_id in Var.BACKUP_CHANNEL.split():
-            await msg.copy(int(chat_id))
-            
-    # MediaInfo, ScreenShots, Sample Video ( Add-ons Features )
+    try:
+        await rep.report(f"Extra Utils for {msg_id}", "info")
+        # Add any additional processing here
+    except Exception as e:
+        await rep.report(f"Error in extra_utils: {str(e)}", "error")
