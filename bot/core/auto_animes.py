@@ -61,18 +61,18 @@ async def get_animes(name, torrent, force=False):
                 # Get poster
                 poster_url = await aniInfo.get_poster()
                 
-                # Post to dedicated channel
+                # Post to dedicated channel (without synopsis)
                 if poster_url:
                     post_msg = await bot.send_photo(
                         channel_details['channel_id'],
                         photo=poster_url,
-                        caption=await aniInfo.get_caption()
+                        caption=await aniInfo.get_caption(is_main_channel=False)
                     )
                 else:
                     # Send as message if no poster available
                     post_msg = await bot.send_message(
                         channel_details['channel_id'],
-                        text=await aniInfo.get_caption()
+                        text=await aniInfo.get_caption(is_main_channel=False)
                     )
                 
                 # Send sticker to dedicated channel
@@ -81,26 +81,26 @@ async def get_animes(name, torrent, force=False):
                     "CAACAgUAAxkBAAEPRkposlhdldSDTJtDtIG1UPqyLh1xegADFQAClP0pVztrIQO4kT1INgQ"
                 )
                 
-                # Post summary to main channel with join button
+                # Post summary to main channel with join button (with synopsis)
                 await post_main_channel_summary(name, aniInfo, channel_details)
                 
                 await asleep(1.5)
                 stat_msg = await sendMessage(channel_details['channel_id'], f"<b>ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ ᴀɴɪᴍᴇ</b>")
             else:
-                # Original behavior - post to main channel
+                # Original behavior - post to main channel (with synopsis)
                 poster_url = await aniInfo.get_poster()
                 
                 if poster_url:
                     post_msg = await bot.send_photo(
                         Var.MAIN_CHANNEL,
                         photo=poster_url,
-                        caption=await aniInfo.get_caption()
+                        caption=await aniInfo.get_caption(is_main_channel=True)
                     )
                 else:
                     # Send as message if no poster available
                     post_msg = await bot.send_message(
                         Var.MAIN_CHANNEL,
-                        text=await aniInfo.get_caption()
+                        text=await aniInfo.get_caption(is_main_channel=True)
                     )
                 
                 # Send sticker after the post
@@ -176,22 +176,28 @@ async def get_animes(name, torrent, force=False):
         await rep.report(format_exc(), "error")
 
 async def post_main_channel_summary(name, aniInfo, channel_details):
-    """Post summary to main channel with join button"""
+    """Post summary to main channel with join button and synopsis with expand indicator"""
     try:
-        # Extract episode info from name
-        episode_info = extract_episode_info(name)
-        
         # Get clean anime title from aniInfo instead of raw filename
         titles = aniInfo.adata.get("title", {})
         clean_title = titles.get('english') or titles.get('romaji') or titles.get('native') or "Unknown Anime"
         
-        # Create summary caption with clean title
+        # Extract episode info from name with improved detection
+        episode_info = extract_episode_info(name, aniInfo)
+        
+        # Get synopsis from AniList
+        synopsis = aniInfo.adata.get("description", "No synopsis available.")
+        if synopsis and len(synopsis) > 800:
+            synopsis = synopsis[:800] + "..."
+        
+        # Create summary caption with clean title and synopsis in blockquote with expand indicator
         caption = f"<b>{clean_title}</b>\n"
         caption += f"<b>──────────────────────────────</b>\n"
         caption += f"<b>➤ Season - {episode_info['season']}</b>\n"
         caption += f"<b>➤ Episode - {episode_info['episode']}</b>\n"
         caption += f"<b>➤ Quality: {episode_info['quality']}</b>\n"
-        caption += f"<b>────────────────────────────</b>"
+        caption += f"<b>────────────────────────────</b>\n"
+        caption += f"<blockquote><b>‣ Synopsis : {synopsis}\n\n📖 Tap to expand/collapse</b></blockquote>"
         
         # Create join button
         keyboard = None
@@ -223,8 +229,8 @@ async def post_main_channel_summary(name, aniInfo, channel_details):
     except Exception as e:
         await rep.report(f"❌ Failed to post summary to main channel: {str(e)}", "error")
 
-def extract_episode_info(anime_title):
-    """Extract episode, season and quality info from anime title"""
+def extract_episode_info(anime_title, aniInfo=None):
+    """Extract episode, season and quality info from anime title with improved detection"""
     import re
     
     info = {
@@ -234,36 +240,82 @@ def extract_episode_info(anime_title):
         'codec': 'H.264'
     }
     
-    # Extract season
-    season_match = re.search(r'[Ss](\d+)', anime_title)
-    if season_match:
-        info['season'] = season_match.group(1).zfill(2)
+    # Try to get season and episode from anitopy parsed data first
+    if aniInfo and hasattr(aniInfo, 'pdata'):
+        parsed_season = aniInfo.pdata.get("anime_season")
+        parsed_episode = aniInfo.pdata.get("episode_number")
+        
+        if parsed_season:
+            if isinstance(parsed_season, list):
+                info['season'] = str(parsed_season[-1]).zfill(2)
+            else:
+                info['season'] = str(parsed_season).zfill(2)
+        
+        if parsed_episode:
+            info['episode'] = str(parsed_episode).zfill(2)
     
-    # Extract episode
-    episode_patterns = [
-        r'[Ee](\d+)',
-        r'Episode[\s\-]*(\d+)',
-        r'Ep[\s\-]*(\d+)',
-        r'\s(\d+)\s',
-        r'-\s*(\d+)\s*-'
-    ]
+    # Fallback to regex patterns if anitopy didn't parse correctly
+    if info['season'] == '01' or info['episode'] == '01':
+        # Enhanced season detection patterns
+        season_patterns = [
+            r'[Ss](\d+)',
+            r'Season[\s\-]*(\d+)',
+            r'(?:第|シーズン)(\d+)',
+            r'\b(?:S|s)(\d+)\b'
+        ]
+        
+        for pattern in season_patterns:
+            season_match = re.search(pattern, anime_title)
+            if season_match:
+                info['season'] = season_match.group(1).zfill(2)
+                break
+        
+        # Enhanced episode detection patterns
+        episode_patterns = [
+            r'[Ee](\d+)',
+            r'Episode[\s\-]*(\d+)',
+            r'Ep[\s\-]*(\d+)',
+            r'第(\d+)話',
+            r'#(\d+)',
+            r'\b(\d+)(?:話|v\d+)?\b',
+            r'-\s*(\d+)\s*[-\[]',
+            r'\[(\d+)\]',
+            r'(\d+)(?:\s*話|\s*v\d+)?(?:\s*\[|\s*-|\s*$)'
+        ]
+        
+        for pattern in episode_patterns:
+            episode_match = re.search(pattern, anime_title)
+            if episode_match:
+                episode_num = episode_match.group(1)
+                # Avoid matching year-like numbers
+                if len(episode_num) <= 3 and int(episode_num) <= 999:
+                    info['episode'] = episode_num.zfill(2)
+                    break
     
-    for pattern in episode_patterns:
-        episode_match = re.search(pattern, anime_title)
-        if episode_match:
-            info['episode'] = episode_match.group(1).zfill(2)
+    # Quality detection with more patterns
+    quality_patterns = {
+        '1080p': [r'1080p?', r'FHD', r'1920x1080'],
+        '720p': [r'720p?', r'HD', r'1280x720'],
+        '480p': [r'480p?', r'SD', r'854x480'],
+        'HEVC': [r'HEVC', r'H\.?265', r'x265'],
+        '4K': [r'4K', r'2160p', r'UHD', r'3840x2160']
+    }
+    
+    title_upper = anime_title.upper()
+    
+    for quality, patterns in quality_patterns.items():
+        for pattern in patterns:
+            if re.search(pattern, title_upper):
+                if quality == 'HEVC':
+                    info['quality'] = 'HEVC [Sub]'
+                    info['codec'] = 'H.265'
+                elif quality == '4K':
+                    info['quality'] = '4K [Sub]'
+                else:
+                    info['quality'] = f'{quality} [Sub]'
+                break
+        if info['quality'] != 'Multi [Sub]':
             break
-    
-    # Extract quality
-    if '1080p' in anime_title.upper():
-        info['quality'] = '1080p [Sub]'
-    elif '720p' in anime_title.upper():
-        info['quality'] = '720p [Sub]'
-    elif '480p' in anime_title.upper():
-        info['quality'] = '480p [Sub]'
-    elif 'HEVC' in anime_title.upper():
-        info['quality'] = 'HEVC [Sub]'
-        info['codec'] = 'H.265'
     
     return info
 
