@@ -255,7 +255,7 @@ class TextEditor:
         brand = Var.BRAND_UNAME.strip('@')
         
         # Generate filename: S{season}E{episode} Anime Name {quality} [@TeamWarlords].mkv
-        filename = f"S{season_num}E{episode_num} {clean_title} {qual}p [@{brand}].mkv"
+        filename = f"S{season_num}E{episode_num} {clean_title} [{qual}p] [@{brand}].mkv"
         
         # Final cleanup of filename
         filename = re.sub(r'[<>:"/\\|?*]', '', filename)
