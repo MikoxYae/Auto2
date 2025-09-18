@@ -228,7 +228,7 @@ class TextEditor:
         
     @handle_logs
     async def get_upname(self, qual=""):
-        """Generate filename in format: S{season}E{episode} Anime Name {quality} [@TeamWarlords].mkv"""
+        """Generate filename in format: <b>S{season}E{episode} - Anime Name {quality} [@TeamWarlords].mkv</b>"""
         
         # Get season and episode numbers
         anime_season = self.pdata.get("anime_season", "01")
