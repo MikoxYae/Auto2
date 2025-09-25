@@ -197,7 +197,7 @@ async def post_main_channel_summary(name, aniInfo, channel_details):
         caption += f"<b>➤ Episode - {episode_info['episode']}</b>\n"
         caption += f"<b>➤ Quality: {episode_info['quality']}</b>\n"
         caption += f"<b>────────────────────────────</b>\n"
-        caption += f"<blockquote><b>‣ Synopsis : {synopsis}</b></blockquote>"
+        caption += f"<blockquote expandable><b>‣ Synopsis : {synopsis}</b></blockquote>"
         
         # Create join button
         keyboard = None
