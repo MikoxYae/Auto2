@@ -30,7 +30,7 @@ MAIN_CAPTION_FORMAT = """
 <b>➤ Episode - {ep_no}</b>
 <b>➤ Quality: Multi [Sub]</b>
 <b>────────────────────────────</b>
-<blockquote><b>‣ Synopsis : {synopsis} </b></blockquote>
+<blockquote expandable><b>‣ Synopsis : {synopsis} </b></blockquote>
 """
 
 GENRES_EMOJI = {"Action": "👊", "Adventure": choice(['🪂', '🧗‍♀']), "Comedy": "🤣", "Drama": " 🎭", "Ecchi": choice(['💋', '🥵']), "Fantasy": choice(['🧞', '🧞‍♂', '🧞‍♀','🌗']), "Hentai": "🔞", "Horror": "☠", "Mahou Shoujo": "☯", "Mecha": "🤖", "Music": "🎸", "Mystery": "🔮", "Psychological": "♟", "Romance": "💞", "Sci-Fi": "🛸", "Slice of Life": choice(['☘','🍁']), "Sports": "⚽️", "Supernatural": "🫧", "Thriller": "🔥"}
