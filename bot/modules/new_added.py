@@ -7,7 +7,7 @@ import os
 import asyncio
 from pyrogram import filters, Client
 from asyncio.subprocess import PIPE, create_subprocess_exec
-from config import Var  # your admin ID or list
+from bot import Var  # your admin ID or list
 from signal import SIGKILL
 import aiofiles
 
