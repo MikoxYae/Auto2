@@ -20,4 +20,6 @@ git+https://github.com/kaif-00z/html-telegraph-poster
 uvloop
 #https://github.com/KurimuzonAkuma/pyrogram/archive/v2.1.23.zip
 pyrofork
-anime-api
+spacy
+https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
+
