@@ -190,6 +190,14 @@ async def shorten_title(anime_title: str, max_len: int):
         shortened_title = " ".join(words[: max_len // 2])
 
     return shortened_title
+
+def detect_audio(name: str) -> str:
+    name_lower = name.lower()
+    if "multi" in name_lower or "multi-audio" in name_lower or "multiaudio" in name_lower:
+        return "Multi-Audio"
+    if "dual" in name_lower:
+        return "Dual"
+    return "Sub"
   
 class TextEditor:
     def __init__(self, name):
@@ -271,7 +279,8 @@ class TextEditor:
         clean_title = titles.get("english") or titles.get("romaji") or titles.get("native") or self.pdata.get("anime_title", "Unknown Anime")
 
         brand = Var.BRAND_UNAME.strip("@")
-        static_part = f" [{qual}p] [@{brand}].mkv"
+        audio = detect_audio(self.__name)
+        static_part = f" [{qual}p {audio}] [@{brand}].mkv"
         max_title_len = 62 - len(f"S{season_num}E{episode_num}{static_part}")
 
         # Shorten the title intelligently
@@ -303,16 +312,20 @@ class TextEditor:
             if synopsis and len(synopsis) > 800:
                 synopsis = synopsis[:800] + "..."
             
+            audio = detect_audio(self.__name)
             return MAIN_CAPTION_FORMAT.format(
                 title=title,
                 season=season,
                 ep_no=episode,
-                synopsis=synopsis
+                synopsis=synopsis,
+                audio=audio
             )
         else:
             # Dedicated channel format without synopsis
+            audio = detect_audio(self.__name)
             return DEDICATED_CAPTION_FORMAT.format(
                 title=title,
                 season=season,
-                ep_no=episode
+                ep_no=episode,
+                audio=audio
             )
