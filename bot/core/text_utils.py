@@ -195,7 +195,7 @@ def detect_audio(name: str) -> str:
     name_lower = name.lower()
     if "Multi-Audio" in name_lower or "multi-audio" in name_lower or "multiaudio" in name_lower:
         return "Multi-Audio"
-    if "Dual-Audio" in name_lower:
+    if "Dual" in name_lower or "Dual-Audio" in name_lower or "dual-audio" in name_lower:
         return "Dual"
     return "Sub"
   
