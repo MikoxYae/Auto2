@@ -31,8 +31,8 @@ async def update_handler(client, message):
     # Ensure .git exists
     if not os.path.exists(".git"):
         await run_cmd("git", "init", "-q")
-        await run_cmd("git", "config", "--global", "user.email", "bot@example.com")
-        await run_cmd("git", "config", "--global", "user.name", "AnimeBot")
+        await run_cmd("git", "config", "--global", "user.email", "ushachand962@gmail.com")
+        await run_cmd("git", "config", "--global", "user.name", "incredaimaso")
         await run_cmd("git", "remote", "add", "origin", UPSTREAM_REPO)
 
     # Fetch latest commits
