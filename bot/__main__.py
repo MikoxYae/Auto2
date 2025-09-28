@@ -3,6 +3,7 @@ from aiofiles import open as aiopen
 from pyrogram import idle
 from pyrogram.filters import command, user
 from os import path as ospath, execl, kill
+import os
 from sys import executable
 from signal import SIGKILL
 
