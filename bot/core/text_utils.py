@@ -159,7 +159,38 @@ class AniLister:
         else:
             await rep.report(f"AniList API Error: {res_code}", "error", log=False)
             return {}
-    
+
+import re
+import spacy
+
+# Load once globally
+nlp = spacy.load("en_core_web_sm")
+
+ANIME_STOP_WORDS = {
+    "of", "the", "a", "an", "with", "does", "not", "in", "on", "at", "and", "to"
+}
+
+async def shorten_title(anime_title: str, max_len: int):
+    """Shortens anime title intelligently using POS tagging."""
+    clean_title = re.sub(r'[<>:"/\\|?*]', '', anime_title)
+    clean_title = re.sub(r'\s+', ' ', clean_title).strip()
+
+    doc = nlp(clean_title)
+    important_words = [t.text for t in doc if t.text.lower() not in ANIME_STOP_WORDS and t.pos_ in {"NOUN","PROPN","ADJ"}]
+
+    shortened_title = ""
+    for word in important_words:
+        candidate = f"{shortened_title} {word}".strip()
+        if len(candidate) > max_len:
+            break
+        shortened_title = candidate
+
+    if not shortened_title:
+        words = clean_title.split()
+        shortened_title = " ".join(words[: max_len // 2])
+
+    return shortened_title
+  
 class TextEditor:
     def __init__(self, name):
         self.__name = name
@@ -228,41 +259,28 @@ class TextEditor:
         
     @handle_logs
     async def get_upname(self, qual=""):
-        """Generate filename in format: <b>S{season}E{episode} - Anime Name {quality} [@TeamWarlords].mkv</b>"""
-        
-        # Get season and episode numbers
         anime_season = self.pdata.get("anime_season", "01")
         if isinstance(anime_season, list):
             season_num = str(anime_season[-1]).zfill(2)
         else:
             season_num = str(anime_season).zfill(2) if anime_season else "01"
-        
+
         episode_num = str(self.pdata.get("episode_number", "01")).zfill(2)
-        
-        # Get clean anime title from AniList data
+
         titles = self.adata.get("title", {})
-        clean_title = titles.get('english') or titles.get('romaji') or titles.get('native')
-        
-        # If no AniList title, use parsed anime name
-        if not clean_title:
-            clean_title = self.pdata.get("anime_title", "Unknown Anime")
-        
-        # Clean the title for filename use
-        clean_title = re.sub(r'[<>:"/\\|?*]', '', clean_title)
-        clean_title = re.sub(r'\s+', ' ', clean_title).strip()
-        
-        # Format brand name (remove @ if already present)
-        brand = Var.BRAND_UNAME.strip('@')
-        
-        # Generate filename: S{season}E{episode} Anime Name {quality} [@TeamWarlords].mkv
-        filename = f"S{season_num}E{episode_num} {clean_title} [{qual}p] [@{brand}].mkv"
-        
-        # Final cleanup of filename
-        filename = re.sub(r'[<>:"/\\|?*]', '', filename)
-        filename = re.sub(r'\s+', ' ', filename)  # Replace multiple spaces with single space
-        filename = filename.strip()
-        
+        clean_title = titles.get("english") or titles.get("romaji") or titles.get("native") or self.pdata.get("anime_title", "Unknown Anime")
+
+        brand = Var.BRAND_UNAME.strip("@")
+        static_part = f" [{qual}p] [@{brand}].mkv"
+        max_title_len = 62 - len(f"S{season_num}E{episode_num}{static_part}")
+
+        # Shorten the title intelligently
+        clean_title = await shorten_title(clean_title, max_title_len)
+
+        filename = f"S{season_num}E{episode_num} {clean_title}{static_part}"
+        filename = re.sub(r'\s+', " ", filename).strip()
         return filename
+  
 
     @handle_logs
     async def get_caption(self, is_main_channel=False):
