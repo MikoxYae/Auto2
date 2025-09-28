@@ -2,7 +2,7 @@
 
 import subprocess
 from pyrogram import filters
-from bot import var
+from bot import Var
 
 @bot.on_message(filters.command("shell") & filters.user(Var.OWNER_ID))
 async def shell_handler(client, message):
