@@ -14,9 +14,10 @@ psutil
 pycountry
 pymongo==3.12.3
 python-dotenv
-tgcrypto
+tgcrypto-pyrofork
 torrentp==0.1.7
 git+https://github.com/kaif-00z/html-telegraph-poster
 uvloop
-https://github.com/KurimuzonAkuma/pyrogram/archive/v2.1.23.zip
+#https://github.com/KurimuzonAkuma/pyrogram/archive/v2.1.23.zip
+pyrofork
 anime-api
