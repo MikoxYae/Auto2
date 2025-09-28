@@ -193,9 +193,9 @@ async def shorten_title(anime_title: str, max_len: int):
 
 def detect_audio(name: str) -> str:
     name_lower = name.lower()
-    if "multi" in name_lower or "multi-audio" in name_lower or "multiaudio" in name_lower:
+    if "Multi-Audio" in name_lower or "multi-audio" in name_lower or "multiaudio" in name_lower:
         return "Multi-Audio"
-    if "dual" in name_lower:
+    if "Dual-Audio" in name_lower:
         return "Dual"
     return "Sub"
   
