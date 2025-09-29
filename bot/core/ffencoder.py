@@ -33,59 +33,55 @@ class FFEncoder:
         self.__start_time = time()
 
     async def progress(self):
-        self.__total_time = await mediainfo(self.dl_path, get_duration=True)
-        if isinstance(self.__total_time, str) or not self.__total_time:
-            self.__total_time = 1.0
+    self.__total_time = await mediainfo(self.dl_path, get_duration=True)
+    if not isinstance(self.__total_time, (int, float)) or self.__total_time == 0:
+        self.__total_time = 1.0
 
-        last_update_time = 0
-        while not (self.__proc is None or self.is_cancelled):
-            async with aiopen(self.__prog_file, 'r+') as p:
-                text = await p.read()
+    last_update_time = 0
+    while not (self.__proc is None or self.is_cancelled):
+        async with aiopen(self.__prog_file, 'r') as p:
+            text = await p.read()
 
-            if text:
-                # Parse ffmpeg stats
-                time_done = int(t[-1]) / 1_000_000 if (t := findall("out_time_ms=(\d+)", text)) else 0
-                ensize = int(s[-1]) if (s := findall(r"total_size=(\d+)", text)) else 0
+        if text:
+            # ✅ Extract current time and size from ffmpeg
+            done_ms = int(findall(r"out_time_ms=(\d+)", text)[-1]) if findall(r"out_time_ms=(\d+)", text) else 0
+            done_sec = done_ms / 1_000_000
 
-                # Safety: clamp time_done
-                time_done = min(time_done, self.__total_time)
+            size = int(findall(r"total_size=(\d+)", text)[-1]) if findall(r"total_size=(\d+)", text) else 0
 
-                # Percent calculation
-                percent = round((time_done / self.__total_time) * 100, 2)
+            # ✅ Time elapsed and speed
+            elapsed = time() - self.__start_time
+            speed = size / max(elapsed, 0.01)
 
-                # ETA
-                diff = time() - self.__start_time
-                eta = (self.__total_time - time_done) if time_done > 0 else 0
+            # ✅ Progress percentage
+            percent = round((done_sec / self.__total_time) * 100, 2)
 
-                # Speed (average encoded bytes per second)
-                speed = ensize / diff if diff > 0 else 0
+            # ✅ Estimate total size and ETA
+            tsize = size / max(percent / 100, 0.01)
+            eta = (tsize - size) / max(speed, 0.01)
 
-                # More stable estimated final size
-                tsize = (ensize / time_done * self.__total_time) if time_done > 5 else 0
+            # ✅ Progress bar (12 blocks)
+            bar = "█" * floor(percent / 8) + "▒" * (12 - floor(percent / 8))
 
-                # Progress bar (25 blocks)
-                bar_blocks = 25
-                filled_blocks = floor((percent / 100) * bar_blocks)
-                bar = "█" * filled_blocks + "▒" * (bar_blocks - filled_blocks)
-
-                # Only update message every 5 seconds
-                if time() - last_update_time >= 8:
-                    last_update_time = time()
-                    progress_str = f"""<b>ᴀɴɪᴍᴇ ɴᴀᴍᴇ :</b> <b>{self.__name}</b>
+            # Only update every 8 seconds
+            if time() - last_update_time >= 8:
+                last_update_time = time()
+                progress_str = f"""<b>ᴀɴɪᴍᴇ ɴᴀᴍᴇ :</b> <b>{self.__name}</b>
 
 <blockquote>‣ <b>sᴛᴀᴛᴜs :</b> ᴇɴᴄᴏᴅɪɴɢ <code>[{bar}]</code> {percent}%</blockquote> 
-<blockquote>‣ <b>sɪᴢᴇ :</b> {convertBytes(ensize)} out of ~ {convertBytes(tsize)}
+<blockquote>‣ <b>sɪᴢᴇ :</b> {convertBytes(size)} out of ~ {convertBytes(tsize)}
 ‣ <b>sᴘᴇᴇᴅ :</b> {convertBytes(speed)}/s
-‣ <b>ᴛɪᴍᴇ ᴛᴏᴏᴋ :</b> {convertTime(diff)}
+‣ <b>ᴛɪᴍᴇ ᴛᴏᴏᴋ :</b> {convertTime(elapsed)}
 ‣ <b>ᴛɪᴍᴇ ʟᴇғᴛ :</b> {convertTime(eta)}</blockquote>
 <blockquote>‣ <b>ғɪʟᴇ(s) ᴇɴᴄᴏᴅᴇᴅ:</b> <code>{Var.QUALS.index(self.__qual)} / {len(Var.QUALS)}</code></blockquote>"""
 
-                    await editMessage(self.message, progress_str)
+                await editMessage(self.message, progress_str)
 
-                if (prog := findall(r"progress=(\w+)", text)) and prog[-1] == 'end':
-                    break
+            # Exit if ffmpeg finished
+            if (prog := findall(r"progress=(\w+)", text)) and prog[-1] == 'end':
+                break
 
-            await asleep(2)
+        await asleep(2)  # short sleep to reduce telegram flood
     
     async def start_encode(self):
         if ospath.exists(self.__prog_file):
