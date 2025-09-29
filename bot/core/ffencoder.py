@@ -33,7 +33,6 @@ class FFEncoder:
         self.__start_time = time()
 
     async def progress(self):
-        
         self.__total_time = await mediainfo(self.dl_path, get_duration=True)
         if not isinstance(self.__total_time, (int, float)) or self.__total_time == 0:
             self.__total_time = 1.0
@@ -44,27 +43,27 @@ class FFEncoder:
             text = await p.read()
 
         if text:
-            # ✅ Extract current time and size from ffmpeg
+            # Extract ffmpeg stats
             done_ms = int(findall(r"out_time_ms=(\d+)", text)[-1]) if findall(r"out_time_ms=(\d+)", text) else 0
             done_sec = done_ms / 1_000_000
 
             size = int(findall(r"total_size=(\d+)", text)[-1]) if findall(r"total_size=(\d+)", text) else 0
 
-            # ✅ Time elapsed and speed
+            # Time elapsed and speed
             elapsed = time() - self.__start_time
             speed = size / max(elapsed, 0.01)
 
-            # ✅ Progress percentage
+            # Progress percentage
             percent = round((done_sec / self.__total_time) * 100, 2)
 
-            # ✅ Estimate total size and ETA
-            tsize = size / max(percent / 100, 0.01)
+            # Estimated total size and ETA
+            tsize = (size / done_sec * self.__total_time) if done_sec > 5 else 0
             eta = (tsize - size) / max(speed, 0.01)
 
-            # ✅ Progress bar (12 blocks)
+            # Progress bar (12 blocks)
             bar = "█" * floor(percent / 8) + "▒" * (12 - floor(percent / 8))
 
-            # Only update every 8 seconds
+            # Only update Telegram message every 8 seconds
             if time() - last_update_time >= 8:
                 last_update_time = time()
                 progress_str = f"""<b>ᴀɴɪᴍᴇ ɴᴀᴍᴇ :</b> <b>{self.__name}</b>
@@ -82,7 +81,7 @@ class FFEncoder:
             if (prog := findall(r"progress=(\w+)", text)) and prog[-1] == 'end':
                 break
 
-        await asleep(2)  # short sleep to reduce telegram flood
+        await asleep(2)  # short sleep to reduce Telegram flood
     
     async def start_encode(self):
         if ospath.exists(self.__prog_file):
