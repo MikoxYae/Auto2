@@ -33,9 +33,10 @@ class FFEncoder:
         self.__start_time = time()
 
     async def progress(self):
-    self.__total_time = await mediainfo(self.dl_path, get_duration=True)
-    if not isinstance(self.__total_time, (int, float)) or self.__total_time == 0:
-        self.__total_time = 1.0
+        
+        self.__total_time = await mediainfo(self.dl_path, get_duration=True)
+        if not isinstance(self.__total_time, (int, float)) or self.__total_time == 0:
+            self.__total_time = 1.0
 
     last_update_time = 0
     while not (self.__proc is None or self.is_cancelled):
