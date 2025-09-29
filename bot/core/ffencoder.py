@@ -34,31 +34,44 @@ class FFEncoder:
 
     async def progress(self):
         self.__total_time = await mediainfo(self.dl_path, get_duration=True)
-        if isinstance(self.__total_time, str):
+        if isinstance(self.__total_time, str) or not self.__total_time:
             self.__total_time = 1.0
+
+        last_update_time = 0
         while not (self.__proc is None or self.is_cancelled):
             async with aiopen(self.__prog_file, 'r+') as p:
                 text = await p.read()
+
             if text:
-                time_done = floor(int(t[-1]) / 1000000) if (t := findall("out_time_ms=(\d+)", text)) else 1
+                # Parse ffmpeg stats
+                time_done = int(t[-1]) / 1_000_000 if (t := findall("out_time_ms=(\d+)", text)) else 0
                 ensize = int(s[-1]) if (s := findall(r"total_size=(\d+)", text)) else 0
-                
+
+                # Safety: clamp time_done
+                time_done = min(time_done, self.__total_time)
+
+                # Percent calculation
+                percent = round((time_done / self.__total_time) * 100, 2)
+
+                # ETA
                 diff = time() - self.__start_time
-                speed = ensize / diff
-                percent = round((time_done/self.__total_time)*100, 2)
-                # Predict final size based on average bitrate so far
-                if time_done > 0:
-                     est_bitrate = (ensize * 8) / time_done      # bits per second
-                     tsize = (est_bitrate * self.__total_time) / 8  # bytes
-                else:
-                     tsize = 0
-                if percent < 10:
-                     tsize = 0   
-                eta = max(self.__total_time - time_done, 0)
-    
-                bar = floor(percent/8)*"█" + (12 - floor(percent/8))*"▒"
-                
-                progress_str = f"""<b>ᴀɴɪᴍᴇ ɴᴀᴍᴇ :</b> <b>{self.__name}</b>
+                eta = (self.__total_time - time_done) if time_done > 0 else 0
+
+                # Speed (average encoded bytes per second)
+                speed = ensize / diff if diff > 0 else 0
+
+                # More stable estimated final size
+                tsize = (ensize / time_done * self.__total_time) if time_done > 5 else 0
+
+                # Progress bar (25 blocks)
+                bar_blocks = 25
+                filled_blocks = floor((percent / 100) * bar_blocks)
+                bar = "█" * filled_blocks + "▒" * (bar_blocks - filled_blocks)
+
+                # Only update message every 5 seconds
+                if time() - last_update_time >= 8:
+                    last_update_time = time()
+                    progress_str = f"""<b>ᴀɴɪᴍᴇ ɴᴀᴍᴇ :</b> <b>{self.__name}</b>
 
 <blockquote>‣ <b>sᴛᴀᴛᴜs :</b> ᴇɴᴄᴏᴅɪɴɢ <code>[{bar}]</code> {percent}%</blockquote> 
 <blockquote>‣ <b>sɪᴢᴇ :</b> {convertBytes(ensize)} out of ~ {convertBytes(tsize)}
@@ -66,11 +79,13 @@ class FFEncoder:
 ‣ <b>ᴛɪᴍᴇ ᴛᴏᴏᴋ :</b> {convertTime(diff)}
 ‣ <b>ᴛɪᴍᴇ ʟᴇғᴛ :</b> {convertTime(eta)}</blockquote>
 <blockquote>‣ <b>ғɪʟᴇ(s) ᴇɴᴄᴏᴅᴇᴅ:</b> <code>{Var.QUALS.index(self.__qual)} / {len(Var.QUALS)}</code></blockquote>"""
-            
-                await editMessage(self.message, progress_str)
+
+                    await editMessage(self.message, progress_str)
+
                 if (prog := findall(r"progress=(\w+)", text)) and prog[-1] == 'end':
                     break
-            await asleep(8)
+
+            await asleep(2)
     
     async def start_encode(self):
         if ospath.exists(self.__prog_file):
