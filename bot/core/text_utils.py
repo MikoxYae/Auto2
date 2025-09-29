@@ -280,7 +280,7 @@ class TextEditor:
 
         brand = Var.BRAND_UNAME.strip("@")
         audio = detect_audio(self.__name)
-        static_part = f" [{qual}p {audio}] [@{brand}].mkv"
+        static_part = f" [{qual}p] [{audio}] [@{brand}].mkv"
         max_title_len = 62 - len(f"S{season_num}E{episode_num}{static_part}")
 
         # Shorten the title intelligently
