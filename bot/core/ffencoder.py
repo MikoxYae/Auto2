@@ -46,8 +46,15 @@ class FFEncoder:
                 diff = time() - self.__start_time
                 speed = ensize / diff
                 percent = round((time_done/self.__total_time)*100, 2)
-                tsize = ensize / (max(percent, 0.01)/100)
-                eta = (tsize-ensize)/max(speed, 0.01)
+                # Predict final size based on average bitrate so far
+                if time_done > 0:
+                     est_bitrate = (ensize * 8) / time_done      # bits per second
+                     tsize = (est_bitrate * self.__total_time) / 8  # bytes
+                else:
+                     tsize = 0
+                if percent < 10:
+                     tsize = 0   
+                eta = max(self.__total_time - time_done, 0)
     
                 bar = floor(percent/8)*"█" + (12 - floor(percent/8))*"▒"
                 
