@@ -295,8 +295,7 @@ class TextEditor:
     async def get_caption(self, is_main_channel=False):
         """Get caption for posts - different format for main channel vs dedicated channels"""
         titles = self.adata.get("title", {})
-        title = titles.get('english') or titles.get('romaji') or titles.get('native') or "Unknown Anime"
-        
+        title = titles.get("english") or titles.get("romaji") or titles.get("native") or "Unknown"
         # Get season and episode from parsed data
         season = self.pdata.get("anime_season", "01")
         if isinstance(season, list):
