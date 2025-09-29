@@ -67,7 +67,6 @@ class FFEncoder:
                 if time() - last_update_time >= 8:
                     last_update_time = time()
                     progress_str = f"""<b>ᴀɴɪᴍᴇ ɴᴀᴍᴇ :</b> <b>{self.__name}</b>
-
     <blockquote>‣ <b>sᴛᴀᴛᴜs :</b> ᴇɴᴄᴏᴅɪɴɢ <code>[{bar}]</code> {percent}%</blockquote> 
     <blockquote>‣ <b>sɪᴢᴇ :</b> {convertBytes(size)} out of ~ {convertBytes(tsize)}
     ‣ <b>sᴘᴇᴇᴅ :</b> {convertBytes(speed)}/s
