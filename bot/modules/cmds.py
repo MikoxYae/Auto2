@@ -74,39 +74,50 @@ async def start_msg(client, message):
             await temp.delete()
             if Var.AUTO_DEL:
                 async def auto_del(msg, timer, original_command, user_message):
-                    # Send notification before deletion
-                    notification_msg = await sendMessage(
-                        user_message, 
-                        f'<b>⏰ ғɪʟᴇ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ɪɴ {convertTime(timer)}, ғᴏʀᴡᴏʀᴅ ᴛᴏ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs ɴᴏᴡ ..</b>'
-                    )
-                    await asleep(timer)
-                    await msg.delete()
-                    
-                    # Create reload URL and button
-                    try:
-                        bot_info = await client.get_me()
-                        reload_url = (
-                            f"https://t.me/{bot_info.username}?start={original_command}"
-                            if original_command and bot_info.username
-                            else None
-                        )
-                    except Exception as e:
-                        await rep.report(f"Error getting bot info: {e}", "error")
-                        reload_url = None
-                    
-                    keyboard = InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("ɢᴇᴛ ғɪʟᴇ ᴀɢᴀɪɴ!", url=reload_url)]]
-                    ) if reload_url else None
+                   # Try to extract file name
+                   file_name = None
+                   if msg.document:
+                       file_name = msg.document.file_name
+                   elif msg.video:
+                       file_name = msg.video.file_name
+                   else:
+                       file_name = "Unknown File"
 
-                    # Update notification with reload button
-                    try:
-                        await editMessage(
-                            notification_msg,
-                            "<b>ʏᴏᴜʀ ᴠɪᴅᴇᴏ / ꜰɪʟᴇ ɪꜱ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴅᴇʟᴇᴛᴇᴅ !!</b>",
-                            keyboard
-                        )
-                    except Exception as e:
-                        await rep.report(f"Error updating notification with 'Get File Again' button: {e}", "error")
+                   # Send notification before deletion
+                   notification_msg = await sendMessage(
+                       user_message, 
+                       f'<b>⏰ <u>{file_name}</u> ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ɪɴ {convertTime(timer)}, ғᴏʀᴡᴏʀᴅ ᴛᴏ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs !</b>'
+                   )
+                   await asleep(timer)
+                   await msg.delete()
+
+                   # Build reload button + close button
+                   try:
+                       bot_info = await client.get_me()
+                       reload_url = (
+                           f"https://t.me/{bot_info.username}?start={original_command}"
+                           if original_command and bot_info.username
+                           else None
+                       )
+                   except Exception as e:
+                       await rep.report(f"Error getting bot info: {e}", "error")
+                       reload_url = None
+
+                   # Inline keyboard with two buttons: Reload + Close
+                   buttons = []
+                   if reload_url:
+                       buttons.append([InlineKeyboardButton("ɢᴇᴛ ғɪʟᴇ ᴀɢᴀɪɴ!", url=reload_url)])
+                       buttons.append([InlineKeyboardButton("❌ ᴄʟᴏsᴇ", callback_data=f"close_msg_{notification_msg.id}")])
+                       keyboard = InlineKeyboardMarkup(buttons)
+
+                   try:
+                       await editMessage(
+                          notification_msg,
+                          f"<b>✅ <u>{file_name}</u> ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴅᴇʟᴇᴛᴇᴅ !</b>",
+                          keyboard
+                       )
+                   except Exception as e:
+                       await rep.report(f"Error updating notification: {e}", "error")
                 
                 # Get dynamic delete timer from database
                 del_timer = await db.get_del_timer()
