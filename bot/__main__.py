@@ -3,6 +3,7 @@ from aiofiles import open as aiopen
 from pyrogram import idle
 from pyrogram.filters import command, user
 from os import path as ospath, execl, kill
+import os
 from sys import executable
 from signal import SIGKILL
 
@@ -32,13 +33,20 @@ async def restart(client, message):
     execl(executable, executable, "-m", "bot")
 
 async def restart():
-    if ospath.isfile(".restartmsg"):
-        with open(".restartmsg") as f:
-            chat_id, msg_id = map(int, f)
-        try:
-            await bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text="<i>Restarted !</i>")
-        except Exception as e:
-            LOGS.error(e)
+    import aiofiles
+    if not ospath.isfile(".restartmsg"):
+        return
+
+    async with aiofiles.open(".restartmsg", "r") as f:
+        data = (await f.read()).split("\n")
+        chat_id, msg_id = int(data[0]), int(data[1])
+
+    try:
+        await bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text="<i>Restarted!</i>")
+    except Exception as e:
+        LOGS.error(e)
+
+    os.remove(".restartmsg")
             
 async def queue_loop():
     LOGS.info("Queue Loop Started !!")

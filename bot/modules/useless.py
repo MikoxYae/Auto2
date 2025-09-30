@@ -113,3 +113,96 @@ async def help_command(client, message):
         """
     
     await sendMessage(message, help_text)
+
+import psutil
+import shutil
+import platform
+import subprocess
+from datetime import datetime, timedelta
+from pyrogram import filters
+
+BOOT_TIME = datetime.fromtimestamp(psutil.boot_time())
+
+def format_bytes(size):
+    # Convert bytes to human-readable format
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        if size < 1024:
+            return f"{size:.2f} {unit}"
+        size /= 1024
+
+@bot.on_message(filters.command("stats") & filters.user(Var.OWNER_ID))
+async def stats_handler(client, message):
+    # Disk usage
+    disk = shutil.disk_usage("/")
+    disk_total = format_bytes(disk.total)
+    disk_used = format_bytes(disk.used)
+    disk_free = format_bytes(disk.free)
+    disk_percent = (disk.used / disk.total) * 100
+
+    # Memory
+    mem = psutil.virtual_memory()
+    mem_total = format_bytes(mem.total)
+    mem_used = format_bytes(mem.used)
+    mem_free = format_bytes(mem.available)
+    mem_percent = mem.percent
+    swap = format_bytes(psutil.swap_memory().used)
+
+    # CPU
+    cpu_usage = psutil.cpu_percent(interval=1)
+    cpu_load = ", ".join(f"{x:.2f}" for x in psutil.getloadavg())
+    cpu_cores = psutil.cpu_count(logical=False)
+
+    # Network
+    net = psutil.net_io_counters()
+    net_total = format_bytes(net.bytes_sent + net.bytes_recv)
+
+    # System info
+    os_name = platform.system()
+    kernel = platform.release()
+    python_ver = platform.python_version()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    uptime = datetime.now() - BOOT_TIME
+    uptime_str = f"{uptime.days*24 + uptime.seconds//3600}h {uptime.seconds//60%60}m"
+
+    # Software Versions
+    ffmpeg_version = subprocess.getoutput("ffmpeg -version").split('\n')[0].split()[2] or "Unknown"
+    pyrogram_version = subprocess.getoutput("pip show pyrogram | grep Version").split()[-1] or "Unknown"
+
+    text = f"""
+<pre>
+=================================================
+                SYSTEM DASHBOARD               
+=================================================
+[DISK]
+| Total      : {disk_total}
+| Used       : {disk_used}  ({disk_percent:.1f}%)
+| Free       : {disk_free}
+
+[MEMORY]
+| RAM Total  : {mem_total}
+| RAM Used   : {mem_used}  ({mem_percent:.1f}%)
+| RAM Free   : {mem_free}
+| Swap Used  : {swap}
+
+[CPU]
+| Cores      : {cpu_cores}
+| Usage      : {cpu_usage}%
+| Load Avg   : {cpu_load}
+
+[NETWORK]
+| Data Total : {net_total}
+
+[SYSTEM]
+| OS         : {os_name}
+| Kernel     : {kernel}
+| Python     : {python_ver}
+| Time       : {now}
+| Uptime     : {uptime_str}
+
+[SOFT VERSIONS]
+| ffmpeg     : {ffmpeg_version}
+| Pyrogram   : {pyrogram_version}
+=================================================
+</pre>
+"""
+    await message.reply(text)
