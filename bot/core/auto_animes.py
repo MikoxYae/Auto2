@@ -176,40 +176,21 @@ async def get_animes(name, torrent, force=False):
         await rep.report(format_exc(), "error")
 
 async def post_main_channel_summary(name, aniInfo, channel_details):
-    """Post summary to main channel with join button and synopsis with expand indicator"""
+    """Post summary to main channel using TextEditor.get_caption()"""
     try:
-        # Get clean anime title from aniInfo instead of raw filename
-        titles = aniInfo.adata.get("title", {})
-        clean_title = titles.get('english') or titles.get('romaji') or titles.get('native') or "Unknown Anime"
-        
-        # Extract episode info from name with improved detection
-        episode_info = extract_episode_info(name, aniInfo)
-        
-        # Get synopsis from AniList
-        synopsis = aniInfo.adata.get("description", "No synopsis available.")
-        if synopsis and len(synopsis) > 800:
-            synopsis = synopsis[:800] + "..."
-        
-        # Create summary caption with clean title and synopsis in blockquote with expand indicator
-        caption = f"<b>{clean_title}</b>\n"
-        caption += f"<b>──────────────────────────────</b>\n"
-        caption += f"<b>➤ Season - {episode_info['season']}</b>\n"
-        caption += f"<b>➤ Episode - {episode_info['episode']}</b>\n"
-        caption += f"<b>➤ Quality: {episode_info['quality']}</b>\n"
-        caption += f"<b>────────────────────────────</b>\n"
-        caption += f"<blockquote expandable><b>‣ Synopsis : {synopsis}</b></blockquote>"
-        
-        # Create join button
+        # Get unified caption from TextEditor
+        caption = await aniInfo.get_caption(is_main_channel=True)
+
+        # Join button for dedicated channel invite
         keyboard = None
         if channel_details.get('invite_link'):
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("ᴊᴏɪɴ ɴᴏᴡ ᴛᴏ ᴡᴀᴛᴄʜ", url=channel_details['invite_link'])]
             ])
-        
-        # Get poster
+
         poster_url = await aniInfo.get_poster()
-        
-        # Send summary to main channel
+
+        # Post to main channel
         if poster_url:
             await bot.send_photo(
                 chat_id=Var.MAIN_CHANNEL,
@@ -223,9 +204,9 @@ async def post_main_channel_summary(name, aniInfo, channel_details):
                 text=caption,
                 reply_markup=keyboard
             )
-        
-        await rep.report(f"✅ Posted summary to main channel: {clean_title}", "info")
-        
+
+        await rep.report(f"✅ Posted summary to main channel: {name}", "info")
+
     except Exception as e:
         await rep.report(f"❌ Failed to post summary to main channel: {str(e)}", "error")
 
