@@ -401,3 +401,10 @@ async def remove_connection(client, message):
             f"❌ <b>No connection found for:</b> {anime_name}\n\n"
             f"<b>Use:</b> <code>/listconnections</code> to see all connections."
         )
+@bot.on_callback_query(filters.regex(r"close_msg_(\d+)"))
+async def close_deleted_msg(client, query):
+    try:
+        await query.message.delete()
+    except:
+        pass
+    await query.answer("❌ Cʟᴏsᴇed", show_alert=False)
