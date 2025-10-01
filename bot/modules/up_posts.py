@@ -60,7 +60,7 @@ async def send_schedule_command(client, message):
             # Send to main channel
             schedule_msg = await bot.send_photo(
                 Var.MAIN_CHANNEL,
-                photo="https://graph.org/file/df68848d38f173ac76acf-6fc89001af21521f2f.jpg",
+                photo="https://graph.org/file/bd0dea0fae723c48b279c-76e285fcf95b537017.jpg",
                 caption=schedule_text
             )
             await (await schedule_msg.pin()).delete()
